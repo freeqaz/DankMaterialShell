@@ -20,6 +20,18 @@ Built with [Quickshell](https://quickshell.org/) and [Go](https://go.dev/)
 
 </div>
 
+> ### This is a personal fork
+>
+> Upstream is **[AvengeMedia/DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell)** — please file issues and pull requests there, not here. This fork exists only to carry a few patches for a **GPD Pocket 4** (6" 1920x1200 panel, fingerprint reader, frequent suspend), and `master` here is **rebased onto upstream `master`** on every re-sync, so commit SHAs are not stable and this branch is force-pushed.
+>
+> | Commit | Scope | Upstreamable? |
+> |---|---|---|
+> | `lock: recover from a wedged fprintd instead of re-forking PAM forever` | `Modules/Lock/` | Yes — general bug fix |
+> | `lock: do not open a fingerprint PAM session during a suspend transition` | `Modules/Lock/Pam.qml` | Yes — general bug fix |
+> | `bar: taller floor and full-height widgets for a 6" 1080p panel` | `Common/Theme.qml`, `Modules/DankBar/` | No — device-specific tuning |
+>
+> See **[FORK.md](FORK.md)** for the per-commit rationale, the bar-geometry arithmetic, the deliberate divergences, and the build / re-sync procedure.
+
 Dux Modular Shell (DMS) is a complete desktop shell for [niri](https://github.com/YaLTeR/niri), [Hyprland](https://hyprland.org/), [MangoWC](https://github.com/DreamMaoMao/mangowc), [Sway](https://swaywm.org), [labwc](https://labwc.github.io/), [Scroll](https://github.com/dawsers/scroll), [Miracle WM](https://github.com/miracle-wm-org/miracle-wm), and other Wayland compositors. It replaces waybar, swaylock, swayidle, mako, fuzzel, polkit, and everything else you'd normally stitch together to make a desktop.
 
 ## Repository Structure
