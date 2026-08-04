@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Pam
 import qs.Common
+import qs.Services
 
 Scope {
     id: root
@@ -96,6 +97,37 @@ Scope {
     readonly property bool fprintSuppressedByPrimaryPam: SettingsData.lockPamExternallyManaged || (customPamActive && SettingsData.lockPamInlineFprint)
     readonly property bool u2fSuppressedByPrimaryPam: SettingsData.lockPamExternallyManaged || (customPamActive && SettingsData.lockPamInlineU2f)
     readonly property bool customU2fPamActive: SettingsData.lockU2fPamPath !== "" && customU2fPamWatcher.loaded
+
+    // A lock that fires because a suspend is imminent (lockBeforeSuspend) must
+    // not open a fingerprint PAM session: nobody can present a finger in that
+    // window, and the session D-Bus-activates fprintd *during* the sleep
+    // transition, where it permanently loses its logind delay inhibitor
+    // (fprintd only takes one in the resume branch and never retries) and its
+    // ExecStartPre runtime-resumes the USB reader ~1s before the xHCI bus
+    // suspends. Re-armed on resume, so unlock-by-finger is unaffected.
+    readonly property bool fprintSuppressedBySleep: SessionService.preparingForSleep
+    onFprintSuppressedBySleepChanged: {
+        if (fprintSuppressedBySleep) {
+            // Going down. checkAvail() hits the guard above, aborts any session
+            // in flight and stands the reader down for the transition.
+            errorRetry.running = false;
+            fprint.checkAvail();
+            return;
+        }
+        // Coming back up. checkAvail() also clears `degraded`, which is
+        // deliberate rather than an accident of sharing one code path: a resume
+        // is a genuine recovery point, because the session that follows it talks
+        // to a *different* fprintd. It is D-Bus activated and idle-exits, and on
+        // hosts that stop it around sleep (see 98-fprintd-sleep in the companion
+        // setup repo) it is guaranteed to be a fresh instance — so the libfprint
+        // wedge that drove us to `degraded` is gone.
+        //
+        // Where that does not hold, the cost is one bounded 4-error cycle before
+        // we degrade again, which is the point of maxErrorTries. That is a far
+        // cry from the 200-error re-fork loop this replaced, and it is worth it
+        // to keep fingerprint working after a resume without a manual re-arm.
+        fprint.checkAvail();
+    }
 
     FileView {
         id: customPamWatcher
@@ -280,7 +312,7 @@ Scope {
         // PamConversation (deleteLater) at that point, so a synchronous
         // start() forks a new PAM child while the old one is still alive.
         function armStart(): void {
-            if (!available || !SettingsData.enableFprint || !root.lockSecured || root.fprintSuppressedByPrimaryPam || degraded || root.unlockInProgress) {
+            if (!available || !SettingsData.enableFprint || !root.lockSecured || root.fprintSuppressedByPrimaryPam || root.fprintSuppressedBySleep || degraded || root.unlockInProgress) {
                 retrying = false;
                 return;
             }
@@ -290,7 +322,7 @@ Scope {
         }
 
         function checkAvail(): void {
-            if (!available || !SettingsData.enableFprint || !root.lockSecured || root.fprintSuppressedByPrimaryPam) {
+            if (!available || !SettingsData.enableFprint || !root.lockSecured || root.fprintSuppressedByPrimaryPam || root.fprintSuppressedBySleep) {
                 retrying = false;
                 errorRetry.running = false;
                 fprintArm.running = false;
@@ -310,7 +342,7 @@ Scope {
         // User-driven "try the reader again" after we gave up. Keeps
         // fingerprint a first-class unlock method instead of a one-shot.
         function rearm(): void {
-            if (!available || !SettingsData.enableFprint || !root.lockSecured || root.fprintSuppressedByPrimaryPam)
+            if (!available || !SettingsData.enableFprint || !root.lockSecured || root.fprintSuppressedByPrimaryPam || root.fprintSuppressedBySleep)
                 return;
             errorRetry.running = false;
             fprintArm.running = false;
@@ -357,7 +389,15 @@ Scope {
                 errorRetry.running = false;
                 fprintArm.running = false;
                 root.fprintState = "unavailable";
-                break;
+                // Sticky on purpose — return instead of break, so we skip the
+                // fprintStateReset.start() below. Every other state here is
+                // transient feedback that should fade after 4 s, but this one is
+                // the only thing telling the user the reader is off AND that the
+                // icon is now a button. Blanking it leaves a red fingerprint_off
+                // glyph with no explanation and no discoverable way back.
+                // rearm() clears it.
+                root.flashMsg();
+                return;
             case PamResult.MaxTries:
                 // The reader physically read fingers, so it is alive:
                 // this is not the wedged case, clear the error budget.
@@ -495,7 +535,7 @@ Scope {
 
         interval: 400
         onTriggered: {
-            if (!fprint.available || !SettingsData.enableFprint || !root.lockSecured || root.fprintSuppressedByPrimaryPam || fprint.degraded || root.unlockInProgress || fprint.active) {
+            if (!fprint.available || !SettingsData.enableFprint || !root.lockSecured || root.fprintSuppressedByPrimaryPam || root.fprintSuppressedBySleep || fprint.degraded || root.unlockInProgress || fprint.active) {
                 fprint.retrying = false;
                 return;
             }
