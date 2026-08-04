@@ -1294,7 +1294,7 @@ Singleton {
     property real fontSizeXXLarge: Math.round(fontScale * 28)
     property real fontSizeDisplay: Math.round(fontScale * 36)
     property real fontSizeDisplayLarge: Math.round(fontScale * 57)
-    property real barHeight: 48
+    property real barHeight: 50
     property real iconSize: 24
     property real iconSizeSmall: 16
     property real iconSizeLarge: 32
@@ -2349,11 +2349,11 @@ Singleton {
     }
 
     function barWidgetThickness(innerPadding, dpr) {
-        return snapEven(Math.max(20, 26 + innerPadding * 0.6), dpr);
+        return snapEven(Math.max(20, 34 + innerPadding * 0.6), dpr);
     }
 
     function barThickness(innerPadding, dpr) {
-        return snapEven(Math.max(barWidgetThickness(innerPadding, dpr) + innerPadding + 4, barHeight - 4 - (8 - innerPadding)), dpr);
+        return snapEven(Math.max(barWidgetThickness(innerPadding, dpr) + innerPadding, barHeight - 4 - (8 - innerPadding)), dpr);
     }
 
     function hairline(dpr) {
