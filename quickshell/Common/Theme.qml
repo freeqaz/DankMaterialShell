@@ -1004,7 +1004,7 @@ Singleton {
     property real fontSizeMedium: Math.round(fontScale * 14)
     property real fontSizeLarge: Math.round(fontScale * 16)
     property real fontSizeXLarge: Math.round(fontScale * 20)
-    property real barHeight: 48
+    property real barHeight: 50
     property real iconSize: 24
     property real iconSizeSmall: 16
     property real iconSizeLarge: 32
