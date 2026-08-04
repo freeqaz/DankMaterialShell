@@ -84,6 +84,8 @@ Item {
             return I18n.tr("Incorrect password - try again");
         if (pam.fprintState === "error")
             return I18n.tr("Fingerprint error");
+        if (pam.fprintState === "unavailable")
+            return I18n.tr("Fingerprint reader unavailable - use password (click the icon to retry)");
         if (pam.fprintState === "max")
             return I18n.tr("Maximum fingerprint attempts reached. Please use password.");
         if (pam.fprintState === "fail")
@@ -801,6 +803,13 @@ Item {
                         width: 20
                         height: 20
 
+                        MouseArea {
+                            anchors.fill: parent
+                            enabled: !root.demoMode && pam && pam.fprint && (pam.fprint.degraded || pam.fprint.tries >= SettingsData.maxFprintTries)
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: pam.fprint.rearm()
+                        }
+
                         DankIcon {
                             id: lockIcon
 
@@ -808,7 +817,7 @@ Item {
                             name: {
                                 if (pam.u2fPending)
                                     return "passkey";
-                                if (pam.fprint.tries >= SettingsData.maxFprintTries)
+                                if (pam.fprint.tries >= SettingsData.maxFprintTries || pam.fprint.degraded)
                                     return "fingerprint_off";
                                 if (pam.fprint.active || pam.fprint.retrying)
                                     return "fingerprint";
@@ -818,7 +827,7 @@ Item {
                             }
                             size: 20
                             color: {
-                                if (pam.fprint.tries >= SettingsData.maxFprintTries)
+                                if (pam.fprint.tries >= SettingsData.maxFprintTries || pam.fprint.degraded)
                                     return Theme.error;
                                 if (pam.u2fState !== "")
                                     return Theme.tertiary;

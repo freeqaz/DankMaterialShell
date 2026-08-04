@@ -34,6 +34,7 @@ Scope {
         fprint.abort();
         u2f.abort();
         errorRetry.running = false;
+        fprintArm.running = false;
         u2fErrorRetry.running = false;
         u2fPendingTimeout.running = false;
         passwdActiveTimeout.running = false;
@@ -60,6 +61,7 @@ Scope {
             fprint.abort();
             u2f.abort();
             errorRetry.running = false;
+            fprintArm.running = false;
             u2fErrorRetry.running = false;
             u2fPendingTimeout.running = false;
             root.u2fPending = false;
@@ -263,20 +265,62 @@ Scope {
         property int tries
         property int errorTries
         property bool retrying: false
+        // set once consecutive hard errors show fprintd/libfprint is wedged
+        // rather than transiently unhappy. Stops the re-fork loop.
+        property bool degraded: false
+
+        // Consecutive PamResult.Error results tolerated before giving up.
+        // Every attempt fork()s a fresh PAM child out of the multithreaded
+        // shell process, and a wedged fprintd only recovers once we stop
+        // talking to it long enough for its idle timeout to fire.
+        readonly property int maxErrorTries: 4
+
+        // The ONLY path that may call start(). Never call start() directly
+        // from onCompleted: the C++ PamContext is still unwinding the old
+        // PamConversation (deleteLater) at that point, so a synchronous
+        // start() forks a new PAM child while the old one is still alive.
+        function armStart(): void {
+            if (!available || !SettingsData.enableFprint || !root.lockSecured || root.fprintSuppressedByPrimaryPam || degraded || root.unlockInProgress) {
+                retrying = false;
+                return;
+            }
+            if (active || fprintArm.running)
+                return;
+            fprintArm.restart();
+        }
 
         function checkAvail(): void {
             if (!available || !SettingsData.enableFprint || !root.lockSecured || root.fprintSuppressedByPrimaryPam) {
                 retrying = false;
+                errorRetry.running = false;
+                fprintArm.running = false;
                 abort();
                 return;
             }
-            if (active)
+            if (active || fprintArm.running)
                 return;
 
             tries = 0;
             errorTries = 0;
             retrying = false;
-            start();
+            degraded = false;
+            armStart();
+        }
+
+        // User-driven "try the reader again" after we gave up. Keeps
+        // fingerprint a first-class unlock method instead of a one-shot.
+        function rearm(): void {
+            if (!available || !SettingsData.enableFprint || !root.lockSecured || root.fprintSuppressedByPrimaryPam)
+                return;
+            errorRetry.running = false;
+            fprintArm.running = false;
+            retrying = false;
+            degraded = false;
+            errorTries = 0;
+            tries = 0;
+            if (root.fprintState === "unavailable" || root.fprintState === "max")
+                root.fprintState = "";
+            armStart();
         }
 
         config: "fprint"
@@ -289,6 +333,9 @@ Scope {
             switch (res) {
             case PamResult.Success:
                 retrying = false;
+                errorTries = 0;
+                errorRetry.running = false;
+                fprintArm.running = false;
                 if (!root.unlockInProgress) {
                     passwd.abort();
                     root.proceedAfterPrimaryAuth();
@@ -296,21 +343,30 @@ Scope {
                 return;
             case PamResult.Error:
                 errorTries++;
-                if (errorTries < 200) {
+                if (errorTries < maxErrorTries) {
                     retrying = true;
-                    abort();
                     errorRetry.restart();
                     return;
                 }
+                // fprintd is not coming back on its own while we keep
+                // hammering it. Stand down, surface it, let the user fall
+                // back to the password field (and let fprintd idle-exit,
+                // which is what actually clears the libfprint wedge).
                 retrying = false;
-                abort();
-                return;
+                degraded = true;
+                errorRetry.running = false;
+                fprintArm.running = false;
+                root.fprintState = "unavailable";
+                break;
             case PamResult.MaxTries:
+                // The reader physically read fingers, so it is alive:
+                // this is not the wedged case, clear the error budget.
                 retrying = false;
+                errorTries = 0;
                 tries++;
                 if (tries < SettingsData.maxFprintTries) {
                     root.fprintState = "fail";
-                    start();
+                    armStart();
                 } else {
                     root.fprintState = "max";
                     abort();
@@ -425,8 +481,27 @@ Scope {
     Timer {
         id: errorRetry
 
-        interval: Math.min(1500 * Math.pow(2, Math.max(0, fprint.errorTries - 1)), 30000)
-        onTriggered: fprint.start()
+        // 4s, 8s, 16s ... capped. Each retry costs a fork() of the shell
+        // plus a full fprintd verify timeout, so retrying cheaply is not free.
+        interval: Math.min(4000 * Math.pow(2, Math.max(0, fprint.errorTries - 1)), 60000)
+        onTriggered: fprint.armStart()
+    }
+
+    // Single funnel for fprint.start(). The delay guarantees we are outside
+    // the completed() emission and past the deferred delete of the previous
+    // PamConversation, so we never have two PAM children in flight.
+    Timer {
+        id: fprintArm
+
+        interval: 400
+        onTriggered: {
+            if (!fprint.available || !SettingsData.enableFprint || !root.lockSecured || root.fprintSuppressedByPrimaryPam || fprint.degraded || root.unlockInProgress || fprint.active) {
+                fprint.retrying = false;
+                return;
+            }
+            fprint.retrying = false;
+            fprint.start();
+        }
     }
 
     Timer {
