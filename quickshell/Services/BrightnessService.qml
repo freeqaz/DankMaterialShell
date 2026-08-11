@@ -503,6 +503,12 @@ Singleton {
         DMSService.sendRequest("brightness.rescan", null, response => {
             if (response.error) {
                 log.error("Failed to rescan brightness devices:", response.error);
+                return;
+            }
+            // the rescan response carries the full device list; consuming it
+            // lets resume/screen-change rescans heal an empty list
+            if (response.result?.devices) {
+                updateFromBrightnessState(response.result);
             }
         });
     }
@@ -515,12 +521,40 @@ Singleton {
         DMSService.sendRequest("brightness.getState", null, response => {
             if (response.error) {
                 log.error("Failed to request brightness state:", response.error);
+                brightnessPullRetry.schedule();
                 return;
             }
             if (response.result) {
                 updateFromBrightnessState(response.result);
             }
+            // the daemon can answer before its logind backend has enumerated
+            // the backlight, and per-device updates can never add a device,
+            // so keep pulling while the list is still empty
+            if (devices.length > 0) {
+                brightnessPullRetry.attempt = 0;
+                brightnessPullRetry.stop();
+            } else {
+                brightnessPullRetry.schedule();
+            }
         });
+    }
+
+    Timer {
+        id: brightnessPullRetry
+        property int attempt: 0
+        repeat: false
+
+        function schedule() {
+            if (attempt >= 4) {
+                attempt = 0;
+                return;
+            }
+            interval = [1000, 2000, 4000, 8000][attempt];
+            attempt++;
+            restart();
+        }
+
+        onTriggered: root.requestBrightnessState()
     }
 
     function updateDeviceBrightnessDisplay(deviceName) {
