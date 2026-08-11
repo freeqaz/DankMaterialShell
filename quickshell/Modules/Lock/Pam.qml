@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Pam
+import Quickshell.Wayland
 import qs.Common
 import qs.Services
 
@@ -127,6 +128,50 @@ Scope {
         // cry from the 200-error re-fork loop this replaced, and it is worth it
         // to keep fingerprint working after a resume without a manual re-arm.
         fprint.checkAvail();
+    }
+
+    // Presence gating. A locked machine with nobody in front of it must not sit
+    // in the re-arm loop: every cycle costs a fork() plus a full 30 s fprintd
+    // verify, and it holds the USB reader at power/control=on for ~0.3 W of a
+    // ~6.1 W idle. Measured on this host, an idle lock screen produced 1650 of
+    // 1786 lifetime fingerprint PAM sessions -- all of them 30.0 s timeouts with
+    // nobody in the room.
+    //
+    // Standing down while idle is also what makes the benign-timeout handling in
+    // fprint.onCompleted safe: with no bound on consecutive benign timeouts, an
+    // untouched lock screen would re-arm forever, which is the 200-error re-fork
+    // loop that maxErrorTries was introduced to kill. Presence is the correct
+    // bound, because it tracks the only thing that can ever end a verify.
+    //
+    // The timeout is deliberately long. The fingerprint reader is a USB device,
+    // not a seat input device, so touching it does NOT register as activity --
+    // if this fires too eagerly it disarms the reader out from under somebody
+    // who is sitting there reading the lock screen. Three minutes without a key,
+    // pointer or touch event means gone, not thinking.
+    readonly property bool fprintSuppressedByAbsence: presenceMonitor.enabled && presenceMonitor.isIdle
+    onFprintSuppressedByAbsenceChanged: {
+        if (fprintSuppressedByAbsence) {
+            // Nobody here. Stop re-arming, but leave any verify already in
+            // flight alone and do NOT set `degraded` -- absence is not a fault,
+            // and degrading here would need a manual re-arm to undo.
+            errorRetry.running = false;
+            fprintArm.running = false;
+            return;
+        }
+        // Somebody moved. rearm() rather than armStart(): a human arriving is a
+        // genuine recovery point, so clear `degraded` and both counters and give
+        // the reader a clean slate. This is the path that fixes "the sensor is
+        // dead when I come back" -- previously nothing re-armed on return, only
+        // on resume, on a fresh lock, or on a click of the fingerprint icon.
+        fprint.rearm();
+    }
+
+    IdleMonitor {
+        id: presenceMonitor
+
+        timeout: 180
+        respectInhibitors: false
+        enabled: root.lockSecured && SettingsData.enableFprint && fprint.available && !root.fprintSuppressedByPrimaryPam
     }
 
     FileView {
@@ -307,12 +352,24 @@ Scope {
         // talking to it long enough for its idle timeout to fire.
         readonly property int maxErrorTries: 4
 
+        // Wall clock at the last start(), for telling the two things that both
+        // arrive as PAM_AUTHINFO_UNAVAIL apart. See onCompleted.
+        property double startedAt: 0
+
+        // A session that survived this long before erroring had a real, armed
+        // verify window behind it: fprintd's own verify timeout is 30 s, while a
+        // wedged fprintd hands back code 9 in 1-2 s. Measured on this host,
+        // every one of 1651 untouched idle timeouts ran the full 30.0 s and
+        // every detected touch answered in a median of 1.0 s, so anything in
+        // between is unambiguous either way.
+        readonly property int armedWindowMs: 10000
+
         // The ONLY path that may call start(). Never call start() directly
         // from onCompleted: the C++ PamContext is still unwinding the old
         // PamConversation (deleteLater) at that point, so a synchronous
         // start() forks a new PAM child while the old one is still alive.
         function armStart(): void {
-            if (!available || !SettingsData.enableFprint || !root.lockSecured || root.fprintSuppressedByPrimaryPam || root.fprintSuppressedBySleep || degraded || root.unlockInProgress) {
+            if (!available || !SettingsData.enableFprint || !root.lockSecured || root.fprintSuppressedByPrimaryPam || root.fprintSuppressedBySleep || root.fprintSuppressedByAbsence || degraded || root.unlockInProgress) {
                 retrying = false;
                 return;
             }
@@ -374,6 +431,24 @@ Scope {
                 }
                 return;
             case PamResult.Error:
+                // pam_fprintd reports "the reader waited 30 s and nobody touched
+                // it" and "fprintd is wedged and has no usable device" with the
+                // same PAM_AUTHINFO_UNAVAIL. Counting the first as a hard error
+                // meant an untouched lock screen exhausted the whole error budget
+                // in ~2.5 min and left the reader `degraded`, i.e. dead to the
+                // touch when the user finally came back -- with no re-arm on
+                // return, only on resume, a fresh lock, or a click on the
+                // fingerprint icon. That is the "fingerprint stopped working"
+                // report; the reader itself matches 94% of real touches.
+                //
+                // An armed window that simply expired says nothing about
+                // fprintd's health, so re-arm without spending the budget. The
+                // loop is bounded by presence, not by this counter.
+                if (startedAt > 0 && Date.now() - startedAt >= armedWindowMs) {
+                    retrying = false;
+                    armStart();
+                    return;
+                }
                 errorTries++;
                 if (errorTries < maxErrorTries) {
                     retrying = true;
@@ -535,11 +610,12 @@ Scope {
 
         interval: 400
         onTriggered: {
-            if (!fprint.available || !SettingsData.enableFprint || !root.lockSecured || root.fprintSuppressedByPrimaryPam || root.fprintSuppressedBySleep || fprint.degraded || root.unlockInProgress || fprint.active) {
+            if (!fprint.available || !SettingsData.enableFprint || !root.lockSecured || root.fprintSuppressedByPrimaryPam || root.fprintSuppressedBySleep || root.fprintSuppressedByAbsence || fprint.degraded || root.unlockInProgress || fprint.active) {
                 fprint.retrying = false;
                 return;
             }
             fprint.retrying = false;
+            fprint.startedAt = Date.now();
             fprint.start();
         }
     }
