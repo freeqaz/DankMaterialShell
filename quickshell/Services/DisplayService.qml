@@ -1342,8 +1342,58 @@ Singleton {
         DMSService.sendRequest("brightness.rescan", null, response => {
             if (response.error) {
                 log.error("Failed to rescan brightness devices:", response.error);
+                return;
+            }
+            if (response.result?.devices) {
+                updateFromBrightnessState(response.result);
             }
         });
+    }
+
+    // The daemon only pushes brightness state on the subscribe socket at
+    // subscription time. If that push races device enumeration (logind
+    // backend comes up after "Ready!"), the pushed device list is empty and
+    // nothing ever repopulates it — updateSingleDevice can't add devices.
+    // Pull the state over the request socket instead, retrying while empty.
+    function refreshBrightnessState() {
+        if (!DMSService.isConnected) {
+            return;
+        }
+
+        DMSService.sendRequest("brightness.getState", null, response => {
+            if (response.error) {
+                log.error("Failed to get brightness state:", response.error);
+                brightnessPullRetry.schedule();
+                return;
+            }
+            if (response.result?.devices) {
+                updateFromBrightnessState(response.result);
+            }
+            if (devices.length > 0) {
+                brightnessPullRetry.attempt = 0;
+                brightnessPullRetry.stop();
+            } else {
+                brightnessPullRetry.schedule();
+            }
+        });
+    }
+
+    Timer {
+        id: brightnessPullRetry
+        property int attempt: 0
+        repeat: false
+
+        function schedule() {
+            if (attempt >= 4) {
+                attempt = 0;
+                return;
+            }
+            interval = [1000, 2000, 4000, 8000][attempt];
+            attempt++;
+            restart();
+        }
+
+        onTriggered: root.refreshBrightnessState()
     }
 
     function updateDeviceBrightnessDisplay(deviceName) {
@@ -1371,6 +1421,7 @@ Singleton {
         deviceBrightnessUserSet = Object.assign({}, SessionData.brightnessUserSetValues);
         if (DMSService.isConnected) {
             checkGammaControlAvailability();
+            refreshBrightnessState();
         }
     }
 
@@ -1410,6 +1461,7 @@ Singleton {
         function onConnectionStateChanged() {
             if (DMSService.isConnected) {
                 checkGammaControlAvailability();
+                refreshBrightnessState();
             } else {
                 brightnessAvailable = false;
                 gammaControlAvailable = false;
@@ -1419,6 +1471,7 @@ Singleton {
 
         function onCapabilitiesReceived() {
             checkGammaControlAvailability();
+            refreshBrightnessState();
         }
 
         function onBrightnessStateUpdate(data) {
