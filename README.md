@@ -29,6 +29,7 @@ Built with [Quickshell](https://quickshell.org/) and [Go](https://go.dev/)
 > | `lock: recover from a wedged fprintd instead of re-forking PAM forever` | `Modules/Lock/` | Yes — general bug fix |
 > | `lock: do not open a fingerprint PAM session during a suspend transition` | `Modules/Lock/Pam.qml` | Yes — general bug fix |
 > | `bar: taller floor and full-height widgets for a 6" 1080p panel` | `Common/Theme.qml`, `Modules/DankBar/` | No — device-specific tuning |
+> | `cc: let plugin tiles set the square tile's icon weight` | `Modules/Plugins/`, `Modules/ControlCenter/` | Probably — small generic capability |
 >
 > See **[FORK.md](FORK.md)** for the per-commit rationale, the bar-geometry arithmetic, the deliberate divergences, and the build / re-sync procedure.
 
