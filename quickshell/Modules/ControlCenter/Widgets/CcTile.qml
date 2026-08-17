@@ -71,6 +71,10 @@ Item {
     property bool iconBlinking: false
     property bool tooltips: true
     property real iconRotation: 0
+    // Fork: stroke weight for the tile glyph (Material Symbols wght axis), so a
+    // multi-level plugin can show its level on a compact, label-less tile.
+    // 0 = unset, keeping DIcon's own filled-dependent default.
+    property int iconWeight: 0
 
     signal clicked
     signal expandClicked
@@ -250,6 +254,7 @@ Item {
             size: root.small ? CcMetrics.iconBoxIconSize : CcMetrics.tileIconSize
             color: root.iconColor
             filled: root.showsActive
+            weight: root.iconWeight > 0 ? root.iconWeight : (root.showsActive ? 500 : 400)
             rotation: root.iconRotation
             visible: root.compact && root.bodyContent === null && root.iconContent === null
 
@@ -325,6 +330,7 @@ Item {
                     size: root.hasIconBox ? CcMetrics.iconBoxIconSize : CcMetrics.tileIconSize
                     color: root.iconColor
                     filled: root.showsActive
+                    weight: root.iconWeight > 0 ? root.iconWeight : (root.showsActive ? 500 : 400)
                     rotation: root.iconRotation
                     visible: root.iconContent === null
 

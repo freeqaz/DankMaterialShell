@@ -65,6 +65,10 @@ Item {
     property string ccWidgetPrimaryText: ""
     property string ccWidgetSecondaryText: ""
     property bool ccWidgetIsActive: false
+    // Fork: stroke weight for the control-center tile's glyph (Material
+    // Symbols wght axis) - how a multi-level plugin shows WHICH level is
+    // active on a compact tile with no room for a label. 0 = theme default.
+    property int ccWidgetIconWeight: 0
     property bool ccWidgetIsToggle: true
     property Component ccExpandedContent: null
     // Unused; kept so older plugins still load.

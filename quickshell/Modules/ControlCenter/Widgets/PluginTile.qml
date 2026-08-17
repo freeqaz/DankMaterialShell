@@ -17,6 +17,7 @@ CcTile {
     // Primary text can be generic ("Display"); the registered name always identifies the plugin.
     denseTitle: widgetDef?.text ?? ""
     active: instance?.ccWidgetIsActive ?? false
+    iconWeight: instance?.ccWidgetIconWeight ?? 0
     toggle: instance?.ccWidgetIsToggle ?? true
     showExpand: hasDetail
     opensPage: (!toggle || compact) && hasDetail
