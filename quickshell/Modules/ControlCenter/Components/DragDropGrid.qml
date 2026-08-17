@@ -1211,6 +1211,7 @@ Column {
 
             iconName: pluginInstance?.ccWidgetIcon || widgetDef?.icon || "extension"
             isActive: pluginInstance?.ccWidgetIsActive || false
+            iconWeight: pluginInstance?.ccWidgetIconWeight ?? 400
             enabled: !root.editMode
 
             onClicked: {

@@ -46,6 +46,10 @@ Item {
     property string ccWidgetPrimaryText: ""
     property string ccWidgetSecondaryText: ""
     property bool ccWidgetIsActive: false
+    // Stroke weight for the control-center tile's glyph. Only the 25%-width
+    // (square, icon-only) tile honours it — it is how a multi-level plugin
+    // shows WHICH level is active when there is no room for a label.
+    property int ccWidgetIconWeight: 400
     property bool ccWidgetIsToggle: true
     property Component ccDetailContent: null
     property real ccDetailHeight: 250

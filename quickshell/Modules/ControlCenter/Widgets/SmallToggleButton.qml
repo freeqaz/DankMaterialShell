@@ -8,6 +8,11 @@ Rectangle {
     property string iconName: ""
     property bool isActive: false
     property real iconRotation: 0
+    // Lets a tile encode a magnitude in the glyph's stroke weight (Material
+    // Symbols `wght` axis, animated by DankIcon) without growing past the
+    // square. 400 is the DankIcon default, i.e. unchanged for every caller
+    // that does not set this.
+    property int iconWeight: 400
 
     signal clicked
     signal iconRotationCompleted
@@ -56,6 +61,7 @@ Rectangle {
         name: iconName
         size: Theme.iconSize
         color: isActive ? _tileIconActive : _tileIconInactive
+        weight: root.iconWeight
         rotation: iconRotation
         onRotationCompleted: root.iconRotationCompleted()
     }
