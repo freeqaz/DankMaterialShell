@@ -1,7 +1,7 @@
 # Fork notes
 
 A personal fork of [AvengeMedia/DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell)
-carrying three patches for a **GPD Pocket 4** (6" 1920x1200 panel, Goodix fingerprint
+carrying four patches for a **GPD Pocket 4** (6" 1920x1200 panel, Goodix fingerprint
 reader, suspends many times a day).
 
 Upstream never touches this file, so it never conflicts on a rebase. Everything that
@@ -13,8 +13,8 @@ that a refactor will silently delete.
 - **`master` is rebased onto upstream `master`**, not merged. SHAs are not stable and
   the branch is force-pushed. Anything built on top of it must be rebased too.
 - **Issues and pull requests go upstream**, not here.
-- Two of the three commits are general bug fixes that are worth upstreaming. One is
-  device tuning that never should be.
+- Two of the four commits are general bug fixes that are worth upstreaming, one is a
+  small generic capability that could be, and one is device tuning that never should be.
 
 ## The commits
 
@@ -192,6 +192,39 @@ has to keep them distinct.
 **Re-sync check:** the count above is the invariant to re-assert, not just the two
 patched sites. If `grep -rc '26 + '` returns something other than 10, upstream has added
 or removed a copy and this section is stale.
+
+### 4. `cc: let plugin tiles set the square tile's icon weight`
+
+**Upstreamable: probably.** Files: `Modules/Plugins/PluginComponent.qml`,
+`Modules/ControlCenter/Components/DragDropGrid.qml`,
+`Modules/ControlCenter/Widgets/SmallToggleButton.qml`. 11 lines, all additive.
+
+A control-center tile at `width: 25` renders as `SmallToggleButton` — an icon-only
+square with no label. That is the right shape for a frequently-tapped toggle, but it
+leaves a plugin only `isActive` to communicate with: one bit. A plugin with *levels*
+(here: a three-step night tint) has no way to say **which** level is active.
+
+Material Symbols is a variable font and `DankIcon` already exposes — and animates — its
+`wght` axis. So the fix is a passthrough, not a new widget:
+
+| File | Change |
+|---|---|
+| `PluginComponent.qml` | `property int ccWidgetIconWeight: 400` |
+| `DragDropGrid.qml` | `pluginSmallToggleComponent` binds `iconWeight: pluginInstance?.ccWidgetIconWeight ?? 400` |
+| `SmallToggleButton.qml` | `property int iconWeight: 400`, passed to the `DankIcon` |
+
+`400` is `DankIcon`'s own default, so every existing tile renders identically — the
+property is inert until a plugin sets it.
+
+**Why not just swap the glyph per level?** A plugin can already do that with
+`ccWidgetIcon`, no fork needed. But a changing glyph reads as a changing *function*,
+while a thickening stroke reads as more *of the same* function — which is what a level
+is. Weight also animates continuously; a ligature swap pops.
+
+**Re-sync check:** if upstream gives `SmallToggleButton` its own weight/emphasis
+handling, or routes plugin tiles through a different component, drop this commit rather
+than reconciling it — the consumer (the `nightTint` plugin) degrades to a plain on/off
+square, not a broken one.
 
 ## Build and install
 
