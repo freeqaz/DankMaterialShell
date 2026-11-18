@@ -22,14 +22,13 @@ Built with [Quickshell](https://quickshell.org/) and [Go](https://go.dev/)
 
 > ### This is a personal fork
 >
-> Upstream is **[AvengeMedia/DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell)** — please file issues and pull requests there, not here. This fork exists only to carry a few patches for a **GPD Pocket 4** (6" 1920x1200 panel, fingerprint reader, frequent suspend), and `master` here is **rebased onto upstream `master`** on every re-sync, so commit SHAs are not stable and this branch is force-pushed.
+> Upstream is **[AvengeMedia/DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell)** — please file issues and pull requests there, not here. This fork exists only to carry a few patches for a **GPD Pocket 4** (6" 1920x1200 panel, fingerprint reader, frequent suspend). It is based on upstream's latest **release tag** (not `master`) and re-applied on every re-sync, so commit SHAs are not stable and branches are force-pushed.
 >
 > | Commit | Scope | Upstreamable? |
 > |---|---|---|
-> | `lock: recover from a wedged fprintd instead of re-forking PAM forever` | `Modules/Lock/` | Yes — general bug fix |
-> | `lock: do not open a fingerprint PAM session during a suspend transition` | `Modules/Lock/Pam.qml` | Yes — general bug fix |
-> | `bar: taller floor and full-height widgets for a 6" 1080p panel` | `Common/Theme.qml`, `Modules/DankBar/` | No — device-specific tuning |
-> | `cc: let plugin tiles set the square tile's icon weight` | `Modules/Plugins/`, `Modules/ControlCenter/` | Probably — small generic capability |
+> | `bar: taller floor and full-height widgets for a 6" 1080p panel` | `Common/Theme.qml` | No — device-specific tuning |
+> | `display: pull brightness state instead of trusting the one push` | `Services/BrightnessService.qml` | Yes — general bug fix |
+> | `cc: let plugin tiles set the square tile's icon weight` | `Modules/Plugins/`, `Modules/ControlCenter/Widgets/` | Probably — small generic capability |
 >
 > See **[FORK.md](FORK.md)** for the per-commit rationale, the bar-geometry arithmetic, the deliberate divergences, and the build / re-sync procedure.
 
