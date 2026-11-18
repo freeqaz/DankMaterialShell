@@ -3,7 +3,12 @@
 # timeout bounds how long a stuck fprintd session can hold the reader.
 # Modules/Lock/Pam.qml mirrors the value in sessionTimeoutMs to tell an expiry
 # apart from a device fault; change both together.
-auth    required    pam_fprintd.so  max-tries=1 timeout=90
+# Fork: max-tries=3, not 1. With 1, every miss ends the session and the shell
+# forks a new PAM child + re-claims the reader (~0.5-0.8 s during which the
+# sensor ignores the finger, and a finger still resting on it at re-arm reads
+# as an instant smeared miss). In-session retries re-arm inside fprintd with no
+# gap; Pam.qml counts each miss from the relayed error message.
+auth    required    pam_fprintd.so  max-tries=3 timeout=90
 account required    pam_permit.so
 password required   pam_deny.so
 session required    pam_permit.so

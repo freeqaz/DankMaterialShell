@@ -318,6 +318,9 @@ Scope {
         property int tries: 0
         property int errorTries: 0
         property double attemptStartedAt: 0
+        // misses relayed as error messages within the current PAM session
+        // (assets/pam/fprint allows several reads per session)
+        property int failsThisSession: 0
         property bool completedDuringStart: false
         readonly property int maxErrorTries: 200
         readonly property int daemonIdleExitMs: 30000
@@ -344,6 +347,7 @@ Scope {
 
         function stop(): void {
             errorRetry.stop();
+            fprintRearm.stop();
             attemptStartedAt = 0;
             abort();
         }
@@ -382,6 +386,7 @@ Scope {
             if (root.fprintState === "error")
                 root.fprintState = "";
             attemptStartedAt = 0;
+            failsThisSession = 0;
             completedDuringStart = false;
             if (start())
                 return;
@@ -423,6 +428,15 @@ Scope {
         onPamMessage: {
             if (attemptStartedAt === 0)
                 attemptStartedAt = Date.now();
+            // A miss inside a multi-try session: give feedback now instead of
+            // only when the session ends, and count it against maxFprintTries.
+            if (messageIsError) {
+                failsThisSession++;
+                tries++;
+                root.fprintState = tries < SettingsData.maxFprintTries ? "fail" : "max";
+                root.flashMsg();
+                fprintStateReset.restart();
+            }
         }
 
         onCompleted: res => {
@@ -448,12 +462,19 @@ Scope {
             case PamResult.Failed:
             case PamResult.MaxTries:
                 stop();
-                tries++;
                 errorTries = 0;
-                root.fprintState = tries < SettingsData.maxFprintTries ? "fail" : "max";
-                root.flashMsg();
-                fprintStateReset.restart();
-                startAttempt();
+                if (failsThisSession === 0) {
+                    // ended without a relayed miss: count it here instead
+                    tries++;
+                    root.fprintState = tries < SettingsData.maxFprintTries ? "fail" : "max";
+                    root.flashMsg();
+                    fprintStateReset.restart();
+                }
+                // Deferred, not synchronous: starting from inside completed()
+                // forks the next PAM child while this conversation is still
+                // unwinding and holding the fprintd claim (10 ms apart on
+                // 2026-11-17), racing for a single-claim device.
+                fprintRearm.restart();
                 return;
             }
         }
@@ -558,6 +579,12 @@ Scope {
                 }
             }
         }
+    }
+
+    Timer {
+        id: fprintRearm
+        interval: 400
+        onTriggered: fprint.startAttempt()
     }
 
     Timer {
