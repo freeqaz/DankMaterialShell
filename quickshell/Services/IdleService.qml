@@ -37,7 +37,7 @@ Singleton {
         // compositor honoring the bar-surface zwp_idle_inhibit inhibitor,
         // which goes inactive whenever the bar surface is occluded
         // (fullscreen windows) or hidden (auto-hide).
-        const base = enabled && !SessionService.idleInhibited && !externalInhibitActive;
+        const base = enabled && !SessionService.idleInhibited && !(respectInhibitors && externalInhibitActive);
         monitorOffMonitor.enabled = base && monitorTimeout > 0 && !postLockMonitorActive;
         postLockMonitorOffMonitor.enabled = enabled && postLockMonitorActive;
         lockMonitor.enabled = base && lockTimeout > 0;
@@ -105,7 +105,7 @@ Singleton {
     IdleMonitor {
         id: postLockMonitorOffMonitor
         timeout: root.postLockMonitorTimeout > 0 ? root.postLockMonitorTimeout : 86400
-        respectInhibitors: root.respectInhibitors
+        respectInhibitors: false
         enabled: false
         onIsIdleChanged: {
             if (!enabled)
