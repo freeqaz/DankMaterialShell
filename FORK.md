@@ -89,6 +89,22 @@ A changing glyph reads as a changing *function*; a thickening stroke reads as mo
 same* — which is what a level is. If upstream adds its own weight/emphasis API, drop this;
 `nightTint` degrades to a plain on/off tile.
 
+### `lock: let fprintd retry within one PAM session; defer the re-arm`
+
+**Upstreamable: yes.** Files: `assets/pam/fprint`, `Modules/Lock/Pam.qml`.
+
+v2 ships `pam_fprintd max-tries=1`, so each miss = new PAM fork + fprintd re-claim
+(0.5–0.8 s with the sensor deaf; a finger still resting on it at re-arm reads as an
+instant smeared miss), and the re-arm was started synchronously from `completed()`
+(10 ms after the miss, while the old conversation still held the single claim). Fork:
+`max-tries=3`; each relayed miss (`messageIsError`) counts against `maxFprintTries` and
+flashes feedback immediately; re-arm goes through a 400 ms `fprintRearm` timer.
+
+### `lock: break the authFeedbackText height binding loop`
+
+**Upstreamable: yes.** Dropped `elide` on a wrapped Text whose height is bound to its
+implicitHeight (Qt re-lays out to the explicit height → loop warning on every message).
+
 ### `WIP idle: post-lock monitor-off ignores inhibitors; …`
 
 Uncommitted work found in the tree at the 2026-11-17 re-sync, preserved as a commit so it
