@@ -1194,8 +1194,11 @@ Item {
             font.pixelSize: Theme.fontSizeSmall
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
+            // No elide: with a wrapped, elided Text an explicit height feeds
+            // back into implicitHeight (Qt re-lays out to fit it), which is a
+            // binding loop on the height above. maximumLineCount + the clamp
+            // already bound it.
             maximumLineCount: 3
-            elide: Text.ElideRight
             opacity: text.length > 0 ? 1 : 0
 
             Behavior on opacity {
